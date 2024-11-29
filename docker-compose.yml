@@ -1,0 +1,23 @@
+---
+services:
+  openssh-server:
+    image: docker-ubuntu-ssh:latest
+    container_name: openssh-server
+    hostname: openssh-server #optional
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      # Lock down the access to certain IP addresses
+      - ALLOWED_IPS= "user01@1.1.1.1,user02@1.1.1.1" #optional
+      - PUBLIC_KEY=ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDQA7Z34k+
+      - SUDO_ACCESS=true #optional
+      - PASSWORD_ACCESS=true #optional
+      - USER_PASSWORD=password #optional
+      - USER_NAME=user01 #optional
+        #volumes:
+        #- /path/to/openssh-server/config:/config
+    ports:
+      - 1122:22
+    restart: unless-stopped
+
