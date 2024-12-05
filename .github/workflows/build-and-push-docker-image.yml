@@ -1,0 +1,117 @@
+name: Docker Image Deployment
+
+on:
+  push:
+    tags:
+      - '[0-9]+\.[0-9]+' # Only supports version formats like 24.04
+
+env:
+  REGISTRY_GHCR: ghcr.io
+  REGISTRY_DOCKER: docker.io
+  IMAGE: qiaodapei/docker-ubuntu-ssh
+  README_PATH: ./README.md  # Path to the README file
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    permissions:
+      packages: write
+      contents: read
+
+    steps:
+      # Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Cache Docker layers to speed up builds
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      # Replace the Ubuntu version in the Dockerfile
+      - name: Replace Ubuntu version in Dockerfile
+        run: sed -i "s|ubuntu:24.04|ubuntu:${{ github.ref_name }}|g" Dockerfile
+
+      # Set up QEMU for multi-architecture support
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Inspect Buildx configuration
+      - name: Inspect builder
+        run: |
+          echo "Name:      ${{ steps.buildx.outputs.name }}"
+          echo "Endpoint:  ${{ steps.buildx.outputs.endpoint }}"
+          echo "Status:    ${{ steps.buildx.outputs.status }}"
+          echo "Flags:     ${{ steps.buildx.outputs.flags }}"
+          echo "Platforms: ${{ steps.buildx.outputs.platforms }}"
+
+      # Login to Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Login to GitHub Container Registry
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_GHCR }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Automatically generate tags and metadata for Docker images
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE }}
+            ${{ env.REGISTRY_DOCKER }}/${{ env.IMAGE }}
+
+      # Build and push multi-architecture Docker images to Docker Hub and GitHub Container Registry
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/s390x
+          push: true
+          tags: |
+            ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE }}:latest
+            ${{ env.REGISTRY_DOCKER }}/${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.REGISTRY_DOCKER }}/${{ env.IMAGE }}:latest
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
+
+      # Inspect image information
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect \
+          ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE }}:${{ github.ref_name }}
+          docker buildx imagetools inspect \
+          ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE }}:latest
+          docker buildx imagetools inspect \
+          ${{ env.REGISTRY_DOCKER }}/${{ env.IMAGE }}:${{ github.ref_name }}
+          docker buildx imagetools inspect \
+          ${{ env.REGISTRY_DOCKER }}/${{ env.IMAGE }}:latest
+
+      # Update Docker Hub repository description with the README.md content
+      - name: Update Docker Hub Description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.IMAGE }}
+          readme-filepath: ${{ env.README_PATH }}
