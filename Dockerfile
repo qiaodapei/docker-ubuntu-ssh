@@ -2,7 +2,7 @@ FROM ubuntu:24.04
 
 # Install required packages
 RUN apt-get update && \
-    apt-get install -y iproute2 iputils-ping openssh-server tini sudo vim curl jq bash-completion landscape-common bc && \
+    apt-get install -y iproute2 iputils-ping openssh-server tini sudo vim curl jq bash-completion landscape-common bc tmux git && \
     apt-get upgrade -y && \
     apt-get clean
 
